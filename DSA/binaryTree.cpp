@@ -61,4 +61,27 @@ public:
         insert(data,root);
     }
 
+    bool isValidBST(Node* x, double lVal = INT_MIN, double uVal = INT_MAX){
+        if(!x) return true;
+        if(x==root || (x->data > lVal && x->data < uVal)){
+            bool leftValid = isValidBST(x->left, lVal, x->data);
+            bool rightValid = isValidBST(x->right, x->data, uVal);
+            return leftValid && rightValid;
+        }
+        else return false;
+    }
+
+    Node* search(Node* x, double target){
+        if(x==root){
+            if(!isValidBST(root)){cout << "Invalid Tree Structure: Not a Binary Search Tree, method invalid"<<endl;return nullptr;}
+        }
+        
+        if(!x){cout<< "Not found" << endl; return nullptr;}
+        
+        if(x->data == target){return x;}        
+        if(x->data < target){search(x->left,target);}
+        if(x->data > target){search(x->right,target);}
+
+    }
+
 };
