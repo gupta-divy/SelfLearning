@@ -2,6 +2,8 @@
 #include <vector>
 #include <climits>
 #include <cmath>
+#include <algorithm>
+
 
 using namespace std;
 
@@ -12,6 +14,7 @@ private:
 public:
     int rows;
     int cols;
+    Gridworld2D() : rows(0), cols(0) {}
 
     Gridworld2D(int rows, int cols) : rows(rows), cols(cols) {
         grid_mat.resize(rows, vector<int>(cols, 1));
@@ -73,7 +76,7 @@ public:
 
     vector<int> get_lowest_val_idx() {
         vector<int> coord(2);
-        double minValue = cost_map[0][0];
+        double minValue = INT_MAX;
         for (int i = 0; i < gridworld.rows; ++i) {
             for (int j = 0; j < gridworld.cols; ++j) {
                 if (cost_map[i][j] < minValue && !visited[i][j]) {
@@ -92,7 +95,7 @@ public:
         while (true) {
             curr_coord = get_lowest_val_idx();
 
-            if (curr_coord == end_idx) break;
+            if (curr_coord[0] == end_idx[0] && curr_coord[1]==end_idx[1]) break;
 
             neighbors = gridworld.get_neighbors_with_MovingCost(curr_coord);
 
@@ -130,3 +133,22 @@ public:
     }
 
 };
+
+int main() {
+    Gridworld2D gridworld(10, 10);
+
+    vector<int> start = {0, 0};  // Starting position
+    vector<int> end = {9, 9};    // Ending position
+
+    vector<vector<int>> obstacles = {
+        {1, 1}, {1, 2}, {1, 3}, {2, 3}, {3, 3}, {4, 3}, {5, 3}, {5, 4},
+        {5, 5}, {5, 6}, {5, 7}, {6, 7}, {7, 7}, {7, 8}, {8, 8}, {8, 9}
+    };
+
+    gridworld.block_coords(obstacles);
+
+    AStar astar(gridworld, start, end);
+    astar.get_path();
+
+    return 0;
+}
