@@ -49,6 +49,21 @@ public:
         }
         return neighbors;
     }
+
+    void print_grid(const vector<vector<int>>& path = {}) {
+        for (int i = 0; i < rows; ++i) {
+            for (int j = 0; j < cols; ++j) {
+                if (find(path.begin(), path.end(), vector<int>{i, j}) != path.end()) {
+                    cout << "* ";  // Path
+                } else if (grid_mat[i][j] == 0) {
+                    cout << "# ";  // Obstacle
+                } else {
+                    cout << ". ";  // Open space
+                }
+            }
+            cout << endl;
+        }
+    }
 };
 
 class AStar {
@@ -125,11 +140,7 @@ public:
         path.push_back(start_idx);
         reverse(path.begin(), path.end());
 
-        cout << "Path: ";
-        for (const auto& step : path) {
-            cout << "(" << step[0] << ", " << step[1] << ") ";
-        }
-        cout << endl;
+        gridworld.print_grid(path);
     }
 
 };
@@ -140,9 +151,16 @@ int main() {
     vector<int> start = {0, 0};  // Starting position
     vector<int> end = {9, 9};    // Ending position
 
+    // vector<vector<int>> obstacles = {
+    //     {1, 1}, {1, 2}, {1, 3}, {2, 3}, {3, 3}, {4, 3}, {5, 3}, {5, 4},
+    //     {5, 5}, {5, 6}, {5, 7}, {6, 7}, {7, 7}, {7, 8}, {8, 8}, {8, 9}
+    // };
+
     vector<vector<int>> obstacles = {
-        {1, 1}, {1, 2}, {1, 3}, {2, 3}, {3, 3}, {4, 3}, {5, 3}, {5, 4},
-        {5, 5}, {5, 6}, {5, 7}, {6, 7}, {7, 7}, {7, 8}, {8, 8}, {8, 9}
+    {1, 1}, {1, 2}, {1, 3}, {2, 3}, {2, 5}, {2, 6}, {3, 6}, {3, 7},
+    {4, 1}, {4, 2}, {4, 7}, {5, 1}, {5, 5}, {5, 8}, {6, 2}, {6, 6},
+    {7, 3}, {7, 4}, {7, 6}, {8, 5}, {8, 6}, {8, 8}, {9, 4}, {9, 5},
+    {9, 7}
     };
 
     gridworld.block_coords(obstacles);
