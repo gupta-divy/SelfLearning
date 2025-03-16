@@ -16,3 +16,6 @@ joint_limits:
 
 xml_file:
   "universal_robots_ur5e/scene.xml"
+
+robot_name:
+  "ur5e_manipulator_arm"
