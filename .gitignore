@@ -1,0 +1,17 @@
+# Ignore IDE/editor settings
+.vscode/
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Ignore C++ output files
+*.exe
+
+# Ignore build and output directories
+dist/
+build/
+out/
+
+# Ignore cache files
+__pycache__
