@@ -57,6 +57,12 @@
     <mesh file="wrist2_1.obj"/>
     <mesh file="wrist2_2.obj"/>
     <mesh file="wrist3.obj"/>
+    <mesh file="FTS-300-S_support_20210305.stl" />
+    <mesh file="robotiq_85_base_link.stl" />
+    <mesh file="robotiq_85_finger_link.stl" />
+    <mesh file="robotiq_85_finger_tip_link.stl" />
+    <mesh file="robotiq_85_inner_knuckle_link.stl" />
+    <mesh file="robotiq_85_knuckle_link.stl" />
   </asset>
 
   <worldbody>
@@ -112,6 +118,28 @@
                   <geom material="linkgray" mesh="wrist3" class="visual"/>
                   <geom class="eef_collision" pos="0 0.08 0" quat="1 1 0 0" size="0.04 0.02"/>
                   <site name="attachment_site" pos="0 0.1 0" quat="-1 1 0 0"/>
+                  <body name="gripper" pos="0.0 0.113 0.0" euler="-1.57 0 0">
+                    <inertial pos="0 0.0823 0" quat="0.707107 -0.707107 0 0" mass="0" diaginertia="0 0 0" />
+                    <body name="robotiq_FT300_force_torque_senser" pos="0 0 0">
+                        <geom name="inner_cylinder"  type="cylinder" pos="0 0 0.00325" size="0.0315 0.01875" material="black"/>
+                        <geom name="outer_cylinder"  type="cylinder" pos="0 0 0"       size="0.0375 0.0155"  material="black"/>
+                    </body>
+                    <body name="robotiq_85_base_body" pos="0 0 0">
+                        <geom name="robotiq_85_base" type="mesh"     pos="0 0 0.022"   mesh="robotiq_85_base_link"  quat="0.707107 0 -0.707107 0" material="black"/>
+                    </body>
+                    <body name="tips" pos="0 0 0.1">
+                        <geom name="tip_base"  type="box" pos="0 0 0.005"       size="0.01 0.0425 0.005" solimp="1 1 0 0.5 2" material="black"/>
+                        <site name="end_effector" pos="0 0 0.1" size="0.01" rgba="1 0 0 1" group="3"/>
+                    </body>
+                    <body name="tip_left_body" pos="0 -0.085 0.1" quat="1 0 0 0">
+                        <geom name="tip_left" type="box" pos="0  0.0464 0.037" size="0.011 0.0039 0.0375"  solimp="1 1 0 0.5 2" friction="5 0.005 0.0001" material="black"/>
+                        <joint name="joint_tip_left" type="slide" axis="0 1 0" pos="0 0 0" frictionloss="0.01"  damping="0.3" limited="true" range="0 0.033"/>
+                    </body>
+                    <body name="tip_right_body" pos="0 0.085 0.1" quat="0 0 0 1">
+                        <geom name="tip_right" type="box" pos="0  0.0464 0.037" size="0.011 0.0039 0.0375"  solimp="1 1 0 0.5 2" friction="5 0.005 0.0001" material="black"/>
+                        <joint name="joint_tip_right" type="slide" axis="0 1 0" pos="0 0 0" frictionloss="0.01"  damping="0.3" limited="true" range="0 0.033"/>
+                    </body>
+                  </body>
                 </body>
               </body>
             </body>
@@ -128,9 +156,13 @@
     <general class="size1" name="wrist_1" joint="wrist_1_joint"/>
     <general class="size1" name="wrist_2" joint="wrist_2_joint"/>
     <general class="size1" name="wrist_3" joint="wrist_3_joint"/>
+    <position name="gripper_left" joint="joint_tip_left" kp="10" ctrlrange="0 0.033"/>
+    <position name="gripper_right" joint="joint_tip_right" kp="10" ctrlrange="0 0.033"/>
   </actuator>
 
-  <keyframe>
-    <key name="home" qpos="-1.5708 -1.5708 1.5708 -1.5708 -1.5708 0" ctrl="-1.5708 -1.5708 1.5708 -1.5708 -1.5708 0"/>
-  </keyframe>
+  <!-- <keyframe>
+    <key name="home" qpos="-1.5708 -1.5708 1.5708 -1.5708 -1.5708 0 0 0"
+         ctrl="-1.5708 -1.5708 1.5708 -1.5708 -1.5708 0 0 0"/>
+  </keyframe> -->
+
 </mujoco>

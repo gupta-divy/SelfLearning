@@ -20,15 +20,15 @@ class RobotState():
         self.eef_pos = None if mode == "c-space" else np.array(state)
     
     def get_eef_pose(self):
-        self.eef_pos = RobotState.robot.forward_kinematics() if self.eef_pos is None else self.eef_pos
+        self.eef_pos = RobotState.robot.get_eef_pose(self.joint_ang) if self.eef_pos is None else self.eef_pos
         return self.eef_pos
 
     def get_joint_ang(self):
-        self.joint_ang = RobotState.robot.inverse_kinematics() if self.joint_ang is None else self.joint_ang
+        self.joint_ang = RobotState.robot.do_inverse_kinematics(self.eef_pos) if self.joint_ang is None else self.joint_ang
         return self.joint_ang
 
     def in_collision(self):
-        return RobotState.robot.is_colliding_with_obstacles(joint_config=self.get_joint_ang())
+        return RobotState.robot.is_colliding_with_obstacles(jointConfig=self.get_joint_ang())
 
 class Node:
     '''Node is defined as a tree node in C-space'''
@@ -40,8 +40,18 @@ class Node:
 
 class RRTAlgorithm:
     def __init__(self, start: RobotState, goal: RobotState, tolerance: np.ndarray, samplingSpace: np.ndarray, stepSize: float = 0.1, moveStepSize: float = 0.01, goalBias: float = 0.2, mode: str='c-space', numIterations: int = 500):
+        init_check = True
         self.root = Node(robot_state=start, mode=mode)
         self.goal = Node(robot_state=goal, mode=mode)
+
+        if(not self.root.is_valid): 
+            init_check = False
+            print("Invalid Start, Obstacle in Contact")
+        if(not self.goal.is_valid): 
+            init_check = False
+            print("Invalid Goal, Obstacle in Contact")
+        if not init_check: raise ValueError("Invalid Start / Goal")
+
         self.mode = mode
         self.nearest_node = None
         self.iterations = numIterations
@@ -74,6 +84,7 @@ class RRTAlgorithm:
     def get_path(self):
         if not self.goal_found:
             if len(self.waypoints)==0: self.solve()
+        if self.goal_found:
             path = [point.state for point in self.waypoints]
             return np.vstack(path)
         else:
@@ -178,35 +189,40 @@ if __name__ == "__main__":
 
     ur5_robot = Robot(robotConfigPath="ur5_config.yaml")
     RobotState.set_robot(ur5_robot)
-
+    ur5_robot.sim_env.set_joint_angles(joint_angles= [-1.5708,-1.5708, 1.5708, -1.5708, -1.5708,0,0,0])
     # Define start and goal joint angles within limits
-    start_state = np.array([0, -np.pi/4, np.pi/4, 0, np.pi/6, 0])
-    goal_state = np.array([np.pi/2, -np.pi/3, np.pi/6, 0, -np.pi/4, np.pi/3])
+    start_state = np.array([-1.5708,-1.5708, 1.5708, -1.5708, -1.5708,0])
+    # goal_state = np.array([np.pi/3, -np.pi/4, -np.pi/8, -np.pi/6, -np.pi/3, np.pi/4])
     goal_tolerance = np.array([0.1] * 6)
-
-    # print(ur5_robot.forward_kinematics(start_state))
-    # print(ur5_robot.forward_kinematics(goal_state))
+    target_obj_pose = ur5_robot.sim_env.get_link_pos(link="box")
+    target_pos = np.hstack((target_obj_pose[:3], [np.pi, 0, 0]))
+    target_pos = target_pos.reshape(1, -1) 
+    goal_state = ur5_robot.do_inverse_kinematics(eefPose=target_pos, currentJointAng=[-1.05, -1.2, 1.8, -2.5, -1.57, 0])
+    print("Goal State: ", goal_state)
 
     # Initialize RRT algorithm
     start_robot = RobotState(state=start_state, mode="c-space")
     goal_robot = RobotState(state=goal_state, mode="c-space")
-
     rrt = RRTAlgorithm(
         start=start_robot, 
         goal=goal_robot, 
         tolerance=goal_tolerance, 
         samplingSpace=ur5_robot.joint_limits,
-        stepSize=0.01,
-        moveStepSize=0.005,
-        goalBias=0.4,
-        numIterations=1000
+        stepSize=0.1,
+        moveStepSize=0.01,
+        goalBias=0.05,
+        numIterations=10000
     )
 
     path = rrt.get_path()
-
     if path is None: exit()
     else: print("Path found with", rrt.num_waypoints, "waypoints. Now Simulating: ")
     
-    trajectory = interpolate_trajectory(path)
-    ur5_robot.sim_env.run_simulation(joint_trajectory=trajectory, time_step=0.05)
+    gripper_tips = np.array([[0, 0]])
+    gripper_trajectory = np.repeat(gripper_tips, rrt.num_waypoints, axis=0)
+    gripper_trajectory[-(path.shape[0] // 2):] = [1, 1]
+    path = np.hstack((path,gripper_trajectory))
+    
+    trajectory = interpolate_trajectory(path,num_points=500)
+    ur5_robot.sim_env.run_simulation(joint_trajectory=trajectory, time_step=0.02)
     
