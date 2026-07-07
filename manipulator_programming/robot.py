@@ -1,4 +1,8 @@
 import numpy as np
+from rigidBodyMaths import *
+
+def pseudoInv(J):
+    return np.pseudoInv(J)
 
 class ThreeDOFManipulator:
     """
@@ -13,8 +17,10 @@ class ThreeDOFManipulator:
         # -------------------------
         # Link Parameters
         # -------------------------
+        self.n = 3
         self.h1 = 0.05
         self.l1 = 1.0          # Link 1 length (m)
+        self.h2 = 0.05
         self.l2 = 0.8          # Link 2 length (m)
 
         self.lc1 = 0.5         # COM of link 1 from joint (m)
@@ -47,32 +53,55 @@ class ThreeDOFManipulator:
         self.Mi = np.zeros((3, 3))  # Mass matrix
         self.Cr = np.zeros((3, 3))  # Coriolis matrix
         self.Gr = np.zeros(3)       # Gravity vector
-        self.tau = np.zeros(3)     # Joint torques
+        self.tau = np.zeros(3)      # Joint torques
 
         # -------------------------
         # Frame Definitions
         # -------------------------
-        omega1 = np.asarray([0,0,1])
-        p1 = np.asarray([0,0,0])
-        v1 = -np.cross(omega1, p1)
-        s1 = np.concatenate((omega1, v1))
-
-        omega2 = np.asarray([0,1,0])
-        # p2 = np.asarray([0,0,self.h1])
-        p2 = np.asarray([0,0,0])
-        v2 = -np.cross(omega2, p2)
-        s2 = np.concatenate((omega2, v2))
-
-        omega3 = np.asarray([0,1,0])
-        # p3 = np.asarray([self.l1,self.h2,self.h1])
-        p3 = np.asarray([self.l1,0,0])
-        v3 = -np.cross(omega3, p3)
-        s3 = np.concatenate((omega3, v3))
-
+        s1 = ScrewToAxis(q=[0,0,0], s=[0,0,1], h = 0)
+        s2 = ScrewToAxis(q=[0,0,self.h1], s=[0,1,0], h = 0)
+        s3 = ScrewToAxis(q=[self.l1, self.h2, self.h1], s=[0,1,0], h = 0)
         self.Slist = np.column_stack((s1, s2, s3))
+
         self.M = np.array([
-            [1, 0, 0, self.l1 + self.l2],
-            [0, 0,-1, 0],
-            [0, 1, 0, 0],
+            [0, 0, 1, self.l1 + self.l2],
+            [1, 0, 0, self.h2],
+            [0, 1, 0, self.h1],
             [0, 0, 0, 1]
-        ])
+        ]) # EE at Home Position
+
+        self.vdd0 = [0,0,0,0,0,self.g]
+
+    def fKinSpace(self, Slist, thetaList):
+        '''
+        Computes the end-effector frame given the zero position of the end-effector M,
+        the list of joint screws Slist expressed in the fixed-space frame, and the list of
+        joint values thetalist.
+        '''
+        T = np.eye(4)
+        for i in range(self.n):
+            T = T @ expTwist(Slist[:,i], thetaList[i])
+        T = T @ self.M
+        return T
+    
+    def getSpaceJacobian(self, thetaList):
+        """
+        Space Jacobian:
+        Js[:, i] = Ad(T_i)*S_i
+        where:
+        T_i = e^[S1]θ1 ... e^[S_{i-1}]θ_{i-1}
+        """
+
+        T = np.eye(4)
+        Js = np.zeros((6,self.n))
+        Js[:,0] = self.Slist[:,0]
+        for i in range(1,self.n):
+            T = T @ expTwist(self.Slist[:,i-1], thetaList[i-1])
+            Js[:,i] = Adjoint(T)@self.Slist[:,i]
+        return Js
+    
+    def iKinSpace(self, Slist):
+        pass
+    
+    def iKinBody(self,Blist):
+        pass
