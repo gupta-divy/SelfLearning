@@ -63,6 +63,8 @@ class ThreeDOFManipulator:
         s3 = ScrewToAxis(q=[self.l1, self.h2, self.h1], s=[0,1,0], h = 0)
         self.Slist = np.column_stack((s1, s2, s3))
 
+        self.Blist = np.zeros((6, self.n))  
+
         self.M = np.array([
             [0, 0, 1, self.l1 + self.l2],
             [1, 0, 0, self.h2],
@@ -72,7 +74,7 @@ class ThreeDOFManipulator:
 
         self.vdd0 = [0,0,0,0,0,self.g]
 
-    def fKinSpace(self, Slist, thetaList):
+    def fKinSpace(self, thetaList):
         '''
         Computes the end-effector frame given the zero position of the end-effector M,
         the list of joint screws Slist expressed in the fixed-space frame, and the list of
@@ -80,7 +82,7 @@ class ThreeDOFManipulator:
         '''
         T = np.eye(4)
         for i in range(self.n):
-            T = T @ expTwist(Slist[:,i], thetaList[i])
+            T = T @ expTwist(self.Slist[:,i], thetaList[i])
         T = T @ self.M
         return T
     
@@ -100,8 +102,40 @@ class ThreeDOFManipulator:
             Js[:,i] = Adjoint(T)@self.Slist[:,i]
         return Js
     
-    def iKinSpace(self, Slist):
-        pass
+    def getBodyJacobian(self, thetaList):
+        """
+        Body Jacobian:
+        Jb[:, i] = Ad(T_i)^-1 @ B_i
+        where:
+        T_i = e^[B_{i+1}]theta_{i+1} ... e^[B_n]theta_n
+        """
+        T = np.eye(4)
+        Jb = np.zeros((6, self.n))
+        Jb[:, self.n - 1] = self.Blist[:, self.n - 1]
+
+        for i in range(self.n - 2, -1, -1):
+            T = T @ expTwist(self.Blist[:, i + 1], thetaList[i + 1])
+            Jb[:, i] = Adjoint(TransInv(T)) @ self.Blist[:, i]
+
+        return Jb
     
-    def iKinBody(self,Blist):
-        pass
+    def iKinBody(self, T_sd, thetaZero, ev, eomg, maxIterations=100):
+        k = 0
+        thetaNew = np.array(thetaZero, dtype=float).copy()
+        thetaOld = thetaNew.copy()
+        isErrCriteriaMet = False
+
+        while k < maxIterations and not isErrCriteriaMet:
+            T_sb = self.fKinSpace(thetaOld)
+            T_bs = TransInv(T_sb)
+            T_bd = T_bs @ T_sd
+            Vb = se3ToVec(MatrixLog6(T_bd))
+
+            Jb = self.getBodyJacobian(thetaOld)
+            thetaNew = thetaOld + np.linalg.pinv(Jb) @ Vb
+
+            isErrCriteriaMet = (np.linalg.norm(Vb[:3]) < eomg) and (np.linalg.norm(Vb[3:]) < ev)
+            thetaOld = thetaNew
+            k += 1
+
+        return [thetaNew, isErrCriteriaMet]
