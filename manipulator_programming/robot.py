@@ -1,9 +1,6 @@
 import numpy as np
 from rigidBodyMaths import *
 
-def pseudoInv(J):
-    return np.pseudoInv(J)
-
 class ThreeDOFManipulator:
     """
     3-DOF Manipulator
@@ -21,7 +18,8 @@ class ThreeDOFManipulator:
         self.h1 = 0.05
         self.l1 = 1.0          # Link 1 length (m)
         self.h2 = 0.05
-        self.l2 = 0.8          # Link 2 length (m)
+        self.l2 = 0.5          # Link 2 length (m)
+        
 
         self.lc1 = 0.5         # COM of link 1 from joint (m)
         self.lc2 = 0.4         # COM of link 2 from joint (m)
@@ -59,11 +57,14 @@ class ThreeDOFManipulator:
         # Frame Definitions
         # -------------------------
         s1 = ScrewToAxis(q=[0,0,0], s=[0,0,1], h = 0)
-        s2 = ScrewToAxis(q=[0,0,self.h1], s=[0,1,0], h = 0)
-        s3 = ScrewToAxis(q=[self.l1, self.h2, self.h1], s=[0,1,0], h = 0)
+        s2 = ScrewToAxis(q=[0,0,self.h1], s=[0,-1,0], h = 0)
+        s3 = ScrewToAxis(q=[self.l1, self.h2, self.h1], s=[0,-1,0], h = 0)
         self.Slist = np.column_stack((s1, s2, s3))
 
-        self.Blist = np.zeros((6, self.n))  
+        b3 = ScrewToAxis(q=[0,0,-self.l2], s=[-1,0,0], h=0)
+        b2 = ScrewToAxis(q=[-self.h2,0,-self.l2-self.l1], s=[-1,0,0], h=0)
+        b1 = ScrewToAxis(q=[-self.h2,-self.h1,-self.l2-self.l1], s=[0,1,0], h=0)  
+        self.Blist = np.column_stack((b1, b2, b3))
 
         self.M = np.array([
             [0, 0, 1, self.l1 + self.l2],
@@ -138,4 +139,75 @@ class ThreeDOFManipulator:
             thetaOld = thetaNew
             k += 1
 
-        return [thetaNew, isErrCriteriaMet]
+        return [thetaNew, isErrCriteriaMet, k]
+
+    def iKinPosition(
+        self,
+        p_d,
+        thetaZero,
+        ep=0.01,
+        maxIterations=100,
+        damping=1e-3,
+        stepScale=0.5,
+        wrapAngles=True,
+    ):
+        """
+        Solve inverse kinematics for end-effector position only.
+
+        Parameters
+        ----------
+        p_d : array-like, shape (3,)
+            Desired end-effector position in the world frame.
+        thetaZero : array-like, shape (n,)
+            Initial joint-angle guess in radians.
+        ep : float
+            Position error tolerance in meters.
+        maxIterations : int
+            Maximum number of Newton-style iterations.
+        damping : float
+            Damping used in the least-squares inverse for better numerical stability.
+        stepScale : float
+            Step-size scaling factor in (0, 1].
+        wrapAngles : bool
+            If True, wrap revolute joint angles to [-pi, pi].
+        """
+        p_d = np.asarray(p_d, dtype=float).reshape(3)
+        thetaNew = np.array(thetaZero, dtype=float).reshape(self.n).copy()
+        thetaOld = thetaNew.copy()
+        isErrCriteriaMet = False
+        bestTheta = thetaOld.copy()
+        bestErr = np.inf
+        k = 0
+
+        while k < maxIterations and not isErrCriteriaMet:
+            T_sb = self.fKinSpace(thetaOld)
+            p_current = T_sb[:3, 3]
+            p_err = p_d - p_current
+            errNorm = np.linalg.norm(p_err)
+
+            if errNorm < bestErr:
+                bestErr = errNorm
+                bestTheta = thetaOld.copy()
+
+            isErrCriteriaMet = errNorm < ep
+            if isErrCriteriaMet:
+                break
+
+            Js = self.getSpaceJacobian(thetaOld)
+            Jp = Js[3:, :]
+
+            # Damped least-squares update for position-only IK.
+            JT = Jp.T
+            thetaStep = JT @ np.linalg.inv(Jp @ JT + (damping ** 2) * np.eye(3)) @ p_err
+            thetaNew = thetaOld + stepScale * thetaStep
+
+            if wrapAngles:
+                thetaNew = (thetaNew + np.pi) % (2.0 * np.pi) - np.pi
+
+            thetaOld = thetaNew
+            k += 1
+
+        if not isErrCriteriaMet:
+            thetaNew = bestTheta
+
+        return [thetaNew, isErrCriteriaMet, k]
