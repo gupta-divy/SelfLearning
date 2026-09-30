@@ -1,0 +1,7 @@
+mujoco
+gymnasium[mujoco]
+numpy
+scipy
+matplotlib
+mediapy
+ipywidgets

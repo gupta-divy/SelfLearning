@@ -1,5 +1,12 @@
 import numpy as np
-from rigidBodyMaths import *
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.rigid_body_maths import *
 
 class ThreeDOFManipulator:
     """
@@ -119,6 +126,26 @@ class ThreeDOFManipulator:
             Jb[:, i] = Adjoint(TransInv(T)) @ self.Blist[:, i]
 
         return Jb
+
+    def getEndEffectorPositionJacobian(self, thetaList):
+        """
+        Position Jacobian for the end-effector origin in the space frame.
+
+        The space Jacobian column is a twist [omega, v]. The linear velocity
+        of a point at position p is p_dot = omega x p + v.
+        """
+        thetaList = np.asarray(thetaList, dtype=float).reshape(self.n)
+        T_sb = self.fKinSpace(thetaList)
+        p = T_sb[:3, 3]
+        Js = self.getSpaceJacobian(thetaList)
+
+        Jp = np.zeros((3, self.n))
+        for i in range(self.n):
+            omega = Js[:3, i]
+            v = Js[3:, i]
+            Jp[:, i] = np.cross(omega, p) + v
+
+        return Jp
     
     def iKinBody(self, T_sd, thetaZero, ev, eomg, maxIterations=100):
         k = 0
@@ -138,6 +165,69 @@ class ThreeDOFManipulator:
             isErrCriteriaMet = (np.linalg.norm(Vb[:3]) < eomg) and (np.linalg.norm(Vb[3:]) < ev)
             thetaOld = thetaNew
             k += 1
+
+        return [thetaNew, isErrCriteriaMet, k]
+
+    def iKinPositionBodyMR(
+        self,
+        p_d,
+        thetaZero,
+        ep=0.01,
+        maxIterations=100,
+        damping=1e-3,
+        stepScale=0.5,
+        wrapAngles=True,
+    ):
+        """
+        Solve position-only IK using the Modern Robotics body-frame error idea.
+
+        At each iteration, the desired transform keeps the current end-effector
+        orientation and only changes the end-effector position. This makes the
+        MatrixLog6 error a pure body-frame translation error.
+        """
+        p_d = np.asarray(p_d, dtype=float).reshape(3)
+        thetaNew = np.array(thetaZero, dtype=float).reshape(self.n).copy()
+        thetaOld = thetaNew.copy()
+        isErrCriteriaMet = False
+        bestTheta = thetaOld.copy()
+        bestErr = np.inf
+        k = 0
+
+        while k < maxIterations and not isErrCriteriaMet:
+            T_sb = self.fKinSpace(thetaOld)
+            R_sb = T_sb[:3, :3]
+            p_current = T_sb[:3, 3]
+            p_err = p_d - p_current
+            errNorm = np.linalg.norm(p_err)
+
+            if errNorm < bestErr:
+                bestErr = errNorm
+                bestTheta = thetaOld.copy()
+
+            isErrCriteriaMet = errNorm < ep
+            if isErrCriteriaMet:
+                break
+
+            T_sd = RpToTrans(R_sb, p_d)
+            T_bd = TransInv(T_sb) @ T_sd
+            Vb = se3ToVec(MatrixLog6(T_bd))
+
+            Jb = self.getBodyJacobian(thetaOld)
+            Jb_pos = Jb[3:, :]
+            thetaStep = Jb_pos.T @ np.linalg.solve(
+                Jb_pos @ Jb_pos.T + (damping ** 2) * np.eye(3),
+                Vb[3:],
+            )
+            thetaNew = thetaOld + stepScale * thetaStep
+
+            if wrapAngles:
+                thetaNew = (thetaNew + np.pi) % (2.0 * np.pi) - np.pi
+
+            thetaOld = thetaNew
+            k += 1
+
+        if not isErrCriteriaMet:
+            thetaNew = bestTheta
 
         return [thetaNew, isErrCriteriaMet, k]
 
@@ -193,12 +283,14 @@ class ThreeDOFManipulator:
             if isErrCriteriaMet:
                 break
 
-            Js = self.getSpaceJacobian(thetaOld)
-            Jp = Js[3:, :]
+            Jp = self.getEndEffectorPositionJacobian(thetaOld)
 
             # Damped least-squares update for position-only IK.
             JT = Jp.T
-            thetaStep = JT @ np.linalg.inv(Jp @ JT + (damping ** 2) * np.eye(3)) @ p_err
+            thetaStep = JT @ np.linalg.solve(
+                Jp @ JT + (damping ** 2) * np.eye(3),
+                p_err,
+            )
             thetaNew = thetaOld + stepScale * thetaStep
 
             if wrapAngles:
