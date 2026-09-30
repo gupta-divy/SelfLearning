@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "manipulator-programming"
+version = "0.1.0"
+description = "Self-learning robotics and manipulator programming experiments."
+requires-python = ">=3.10"
+dependencies = [
+    "mujoco",
+    "gymnasium[mujoco]",
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "mediapy",
+    "ipywidgets",
+]
+
+[tool.setuptools]
+packages = ["src", "models", "models.analytical", "experiments", "tempFiles"]
