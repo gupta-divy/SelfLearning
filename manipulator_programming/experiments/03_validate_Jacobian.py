@@ -25,21 +25,27 @@ def main():
 
     # q = np.array([0.0, -np.pi/4, 0.0, -3*np.pi/4, 0.0, np.pi/2, np.pi/2])
     q = np.array([0, 0, 0, -1.57079, 0, 1.57079, -0.7853])
-    tee_analytical = rbt_model.FK(q)
-    print("End-Effector Pose from FK:\n", tee_analytical)
+    dq = np.array([0.1, 0.2, 0.1, 0.05, 0.1, 0.15, 0.05])
 
     data.qpos[:7] = q
     mujoco.mj_forward(model, data)
-    tee_mujoco = np.eye(4)
-    tee_mujoco[:3, :3] = data.site_xmat[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, "ee_site")].reshape(3, 3)
-    tee_mujoco[:3, 3] = data.site_xpos[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, "ee_site")]
-    print("End-Effector Position from Mujoco:\n", tee_mujoco)
+    jacp = np.zeros((3, 9))
+    jacr = np.zeros((3, 9))
+    site_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, "ee_site")
+    mujoco.mj_jacSite(model, data, jacp, jacr, site_id)
+    jacobian_mujoco = np.vstack((jacr[:, :7], jacp[:, :7]))
+    print("End-Effector Jacobian from Mujoco:\n", jacobian_mujoco)
 
-    pos_diff = np.linalg.norm(tee_analytical[:3, 3] - tee_mujoco[:3, 3])
-    print(f"Position difference between analytical FK and Mujoco: {pos_diff:.6f} meters")
+    jacobian_analytical = rbt_model.RobotJacobian(q)
+    print("End-Effector Jacobian from Analytical:\n", jacobian_analytical)
 
-    rot_diff = np.linalg.norm(tee_analytical[:3, :3] - tee_mujoco[:3, :3])
-    print(f"Rotation difference between analytical FK and Mujoco: {rot_diff:.6f}")
+    joint_velocities_analytical = jacobian_analytical @ dq
+    print("Joint Velocities from Analytical Jacobian:\n", joint_velocities_analytical)
+    joint_velocities_mujoco = jacobian_mujoco @ dq
+    print("Joint Velocities from Mujoco Jacobian:\n", joint_velocities_mujoco)
+
+    diff = np.linalg.norm(joint_velocities_analytical - joint_velocities_mujoco)
+    print(f"Difference between analytical and Mujoco joint velocities: {diff:.6f}")
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         while True:
