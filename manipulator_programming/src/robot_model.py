@@ -60,4 +60,27 @@ class RobotModel:
 
         J = np.vstack((j_omega, j_v))
         return J
+    
+    def InverseKinematics(self, T_sd, q0, epsilon=1e-3, max_iterations=1000):
+        """
+        Inverse Kinematics: Computes the joint angles q that achieve the desired end-effector pose T_sd.
+        Uses an iterative method to find a solution.
+        """
+
+        q = np.array(q0, dtype=float)
+        for i in range(max_iterations):
+            T_sb = self.FK(q)
+            T_bd = rbm.TransInv(T_sb) @ T_sd
+            Vb = rbm.se3ToVec(rbm.MatrixLog6(T_bd))
+
+            if np.linalg.norm(Vb) < epsilon:
+                return q
+            
+            Jb = self.RobotJacobian(q)
+            Jb_pseudo_inv = np.linalg.pinv(Jb)
+            q += Jb_pseudo_inv @ Vb
+        
+        raise ValueError("Inverse kinematics did not converge within the maximum number of iterations.")
+        
+    
 
