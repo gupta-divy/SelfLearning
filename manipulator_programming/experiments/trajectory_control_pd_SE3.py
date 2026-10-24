@@ -21,7 +21,7 @@ Kd_r = np.diag([4, 2, 2])
 
 
 # Initialize Panda at home configuration
-model_xml = str(mujoco_model_path("franka_emika_panda", "scene.xml"))
+model_xml = str(mujoco_model_path("franka_emika_panda", "scene_dd.xml"))
 model = mujoco.MjModel.from_xml_path(model_xml)
 data = mujoco.MjData(model)
 mujoco.mj_resetDataKeyframe(model, data, mujoco.mj_name2id(model,mujoco.mjtObj.mjOBJ_KEY,"home"))
@@ -36,9 +36,15 @@ T_init = np.eye(4)
 T_init[:3, :3] = data.site_xmat[ee_site_id].reshape(3, 3)
 T_init[:3, 3] = data.site_xpos[ee_site_id]
 
-# Final pose: translate 10 cm in X, maintain orientation
+R_init = T_init[:3, :3]
+R_delta = Rotation.from_euler(
+    'z', 30, degrees=True
+).as_matrix()
 T_final = T_init.copy()
+# Rotation relative to EE frame
+T_final[:3, :3] = R_init @ R_delta
 T_final[:3, 3] = np.array([0.25, 0.3, 0.15])
+
 
 # Generate trajectory
 traj = TrajectoryGeneratorSE3(
@@ -54,6 +60,8 @@ T_desired, v_desired, omega_desired = traj.getdesired_trajectory()
 # Logging Variables
 jacp = np.zeros((3, 9))
 jacr = np.zeros((3, 9))
+pos_des_log = np.zeros((len(T_desired), 3))
+rot_des_log = np.zeros((len(T_desired), 3, 3))
 error_pos_log = np.zeros((len(T_desired), 3))
 error_vel_log = np.zeros((len(T_desired), 3))
 tau_cmd_log = np.zeros((len(T_desired), nv_arm))
@@ -74,16 +82,19 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
         v_actual = Jv @ qdot
 
         # Position tracking errors
-        e_pos = T_desired[i, :3, 3] - x_actual
+        pos_des_log[i] = T_desired[i, :3, 3]
+        e_pos = pos_des_log[i] - x_actual
         e_vel = v_desired[i] - v_actual
 
         # Orientation tracking errors
         R_desired = T_desired[i, :3, :3]
-        R_actual = data.site_xmat[ee_site_id].reshape(3, 3)
+        R_actual = data.site_xmat[ee_site_id].reshape(3, 3)        
+        rot_des = Rotation.from_matrix(R_desired).as_euler('xyz', degrees=True)
+        rot_des_log[i] = rot_des
+
         R_error = R_desired @ R_actual.T
         e_rot = Rotation.from_matrix(R_error).as_rotvec()
         e_omega = omega_desired[i] - (Jw @ qdot)
-
 
         F_cmd = Kp_p @ e_pos + Kd_p @ e_vel
         M_cmd = Kp_r @ e_rot + Kd_r @ e_omega
@@ -162,7 +173,22 @@ ax_vel.grid(True)
 plt.show()
 
 
+fig = plt.figure(figsize=(14, 7), layout="constrained")
+gs = fig.add_gridspec(2, 1)
+ax_pos = fig.add_subplot(gs[0, 0])
+ax_rot = fig.add_subplot(gs[1, 0], sharex=ax_pos)
 
+ax_pos.plot(time_log, pos_des_log[:, 0], label="X Desired", linestyle='--')
+ax_pos.plot(time_log, pos_des_log[:, 1], label="Y Desired", linestyle='--')
+ax_pos.plot(time_log, pos_des_log[:, 2], label="Z Desired", linestyle='--')
+ax_pos.set_title("Desired Cartesian Position") 
+
+ax_rot.plot(time_log, rot_des_log[:, 0], label="Roll Desired", linestyle='--')
+ax_rot.plot(time_log, rot_des_log[:, 1], label="Pitch Desired", linestyle ='--')
+ax_rot.plot(time_log, rot_des_log[:, 2], label="Yaw Desired", linestyle='--')
+ax_rot.set_title("Desired Orientation (Euler angles in degrees)")
+
+plt.show()
 
 
 

@@ -18,7 +18,7 @@ Kd = np.diag([120, 120, 120])
 
 
 # Initialize Panda at home configuration
-model_xml = str(mujoco_model_path("franka_emika_panda", "scene.xml"))
+model_xml = str(mujoco_model_path("franka_emika_panda", "scene_dd.xml"))
 model = mujoco.MjModel.from_xml_path(model_xml)
 data = mujoco.MjData(model)
 mujoco.mj_resetDataKeyframe(model, data, mujoco.mj_name2id(model,mujoco.mjtObj.mjOBJ_KEY,"home"))
