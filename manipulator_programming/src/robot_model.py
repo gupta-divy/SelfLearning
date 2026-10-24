@@ -76,9 +76,14 @@ class RobotModel:
             if np.linalg.norm(Vb) < epsilon:
                 return q
             
-            Jb = self.RobotJacobian(q)
-            Jb_pseudo_inv = np.linalg.pinv(Jb)
-            q += Jb_pseudo_inv @ Vb
+            Jb = rbm.Adjoint(rbm.TransInv(T_sb)) @ self.SpaceJacobian(q)
+            damp = 0.05
+            dq = Jb.T @ np.linalg.inv(Jb@Jb.T + damp**2 * np.eye(6)) @ Vb
+
+            max_step = 0.1
+            dq = np.clip(dq, -max_step, max_step)
+
+            q = np.clip(q+dq,self.joint_limits["lower"],self.joint_limits["upper"])
         
         raise ValueError("Inverse kinematics did not converge within the maximum number of iterations.")
         
