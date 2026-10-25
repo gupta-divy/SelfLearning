@@ -104,3 +104,65 @@ class TrajectoryGeneratorSE3:
         omega_desired[-1] = omega_desired[-2]
 
         return T_desired, v_desired, omega_desired
+
+class FourierTrajectory:
+    def __init__(
+        self,
+        harmonics: int = 5,
+        NJoints: int = 7,
+        base_period: np.ndarray = None,
+        q_init=None,
+        a=None,
+        b=None,
+    ):
+        self.N = NJoints
+        self.l = harmonics
+        self.T = (
+            np.asarray(base_period, dtype=float)
+            if base_period is not None
+            else np.full(self.N, 10.0, dtype=float)
+        )
+
+        # Shape: (NJoints, harmonics)
+        self.F = (
+            2 * np.pi / self.T[:, None]
+        ) * np.arange(1, self.l + 1)[None, :]
+
+        self.q0 = (
+            np.zeros(self.N)
+            if q_init is None
+            else np.asarray(q_init, dtype=float)
+        )
+
+        shape = (self.N, self.l)
+        self.a = np.zeros(shape) if a is None else np.asarray(a, dtype=float)
+        self.b = np.zeros(shape) if b is None else np.asarray(b, dtype=float)
+
+    def getdesired_trajectory(self, t):
+
+        t = np.atleast_1d(np.asarray(t,dtype=float))
+        phase = t[:,None,None] * self.F[None,:,:]
+        s_phase = np.sin(phase)
+        c_phase = np.cos(phase)
+
+        q = self.q0 + np.sum(
+            (self.a / self.F) * s_phase +
+            (self.b / self.F) * (1-c_phase),
+            axis = 2
+        )
+
+        qd = np.sum(
+            (self.a*c_phase)+
+            (self.b*s_phase),
+            axis = 2
+        )
+
+        qdd = np.sum(
+            self.F*(
+                (-self.a*s_phase)+
+                (self.b*c_phase)
+            ),
+            axis=2
+        )
+
+        return q,qd,qdd

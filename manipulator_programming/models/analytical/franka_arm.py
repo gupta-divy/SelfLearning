@@ -66,6 +66,26 @@ class FrankaArm:
             [0,  0, -1,  0,       self.a7, 0]
         ]).T
 
+        # Base -> each moving link's body frame at q = 0. These are NOT
+        # center-of-mass frames or the tool frame M. Store geometry here so
+        # RobotModel can compute link kinematics without a simulator.
+        offsets = [
+            [0, 0, self.d1], [0, 0, 0], [0, -self.d3, 0],
+            [self.a4, 0, 0], [self.a5, self.d5, 0],
+            [0, 0, 0], [self.a7, 0, 0],
+        ]
+        x_angles = [0, -np.pi/2, np.pi/2, np.pi/2,
+                    -np.pi/2, np.pi/2, np.pi/2]
+        self.M_links = np.zeros((self.n, 4, 4))
+        T_link = np.eye(4)
+        for i, (offset, angle) in enumerate(zip(offsets, x_angles)):
+            c, s = np.cos(angle), np.sin(angle)
+            T_fixed = np.eye(4)
+            T_fixed[:3, :3] = [[1, 0, 0], [0, c, -s], [0, s, c]]
+            T_fixed[:3, 3] = offset
+            T_link = T_link @ T_fixed
+            self.M_links[i] = T_link
+
         # -------------------------
         # Home configuration
         # base -> end effector
